@@ -1,0 +1,42 @@
+# Core ML & Deep Learning
+torch>=2.0.0
+torchvision>=0.15.0
+numpy>=1.24.0
+pandas>=2.0.0
+scipy>=1.11.0
+scikit-learn>=1.3.0
+
+# Quantum Computing
+qiskit>=1.0.0
+qiskit-machine-learning>=0.7.0
+qiskit-aer>=0.13.0
+
+# Conformal Prediction
+mapie>=1.0.0
+
+# Data Processing
+h5py>=3.9.0
+pyarrow>=12.0.0
+
+# Experiment Tracking
+wandb>=0.15.0
+
+# XGBoost Baseline
+xgboost>=2.0.0
+
+# Visualization
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# Database Access (optional - for BigQuery)
+# google-cloud-bigquery>=3.11.0
+# db-dtypes>=1.1.0
+
+# PostgreSQL Access (optional - for local MIMIC-IV)
+# psycopg2-binary>=2.9.0
+# sqlalchemy>=2.0.0
+
+# Utilities
+tqdm>=4.65.0
+pyyaml>=6.0.0
+typing-extensions>=4.7.0
