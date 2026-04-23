@@ -12,7 +12,7 @@
 ```
 Host: 172.16.18.2
 User: csegpuserver
-Password: Redhat#84@
+Password: [ask team members — not stored in repo]
 Command: ssh csegpuserver@172.16.18.2
 ```
 
@@ -41,8 +41,7 @@ Command: ssh csegpuserver@172.16.18.2
 
 ### PhysioNet Credentials
 ```
-Username: nityankulkarni28
-Password: Nitya@123
+Credentials: [ask team members — not stored in repo]
 ```
 
 ### Download Status: ✅ COMPLETE
@@ -85,20 +84,27 @@ The full MIMIC-IV v3.1 dataset has been downloaded to:
 ~/QuantumSepsis/
 ```
 
-### What EXISTS on the server
+### What EXISTS on the server (ALL PIPELINE STAGES COMPLETE)
 - ✅ Full source code in `src/`
 - ✅ MIMIC-IV raw data in `data/raw/physionet.org/files/mimiciv/3.1/`
-- ✅ `run_synthetic_pipeline.py` (synthetic data test — already verified working)
-- ✅ `data/processed/lstm_embeddings.npz` (from synthetic run)
-- ✅ `data/processed/pipeline_results.json` (from synthetic run)
-- ✅ `src/data/cohort_extraction_optimized.py` (memory-efficient version — see Section 5)
+- ✅ `data/processed/cohort.csv` — **94,458 ICU stays, 12,972 sepsis (13.7%)**
+- ✅ `data/processed/hourly_features.parquet` — **~56 MB, 12 features per hour**
+- ✅ `data/processed/{train,val,test}_features.parquet` — Preprocessed splits
+- ✅ `data/processed/features.h5` — Windowed tensors
+- ✅ `checkpoints/lstm_best.pt` — Trained LSTM checkpoint
+- ✅ `data/processed/lstm_embeddings.npz` — 16-dim embeddings for quantum kernel
+- ✅ `data/processed/pipeline_results_real.json` — Final metrics
 
-### What DOES NOT exist yet
-- ❌ `data/processed/cohort.csv` — Real cohort not extracted yet
-- ❌ `data/processed/hourly_features.parquet` — Features not extracted
-- ❌ `data/processed/features.h5` — Windowed tensors not generated
-- ❌ `checkpoints/lstm_best.pt` — No real LSTM trained yet
-- ❌ Python dependencies NOT installed (pandas, torch, etc. are broken/missing)
+### Real Data Results (Phase 1 Complete)
+
+| Model | Test AUROC | Test AUPRC | Sensitivity@95%Spec |
+|-------|-----------|------------|---------------------|
+| **LSTM** | **0.7891** | **0.0519** | **0.2997** |
+| **XGBoost** | **0.8038** | **0.0576** | — |
+| **SOFA** | **0.5869** | **0.0159** | — |
+
+> ⚠️ **AUPRC is low** across all models due to high class imbalance in windowed data.
+> The quantum kernel integration (Phase 2) is expected to improve these numbers.
 
 ### Critical Bug Encountered: OOM Kill
 The original `cohort_extraction.py` loads **entire** labevents (120M rows) and chartevents (330M rows) into RAM before filtering. This causes the Linux OOM killer to terminate the process.

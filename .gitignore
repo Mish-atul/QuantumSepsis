@@ -3,10 +3,10 @@ venv/
 env/
 .env
 
-# Data and Logs
-data/
-logs/
-checkpoints/
+# Data and Logs (top-level only, not src/data/)
+/data/
+/logs/
+/checkpoints/
 
 # Python
 __pycache__/

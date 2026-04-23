@@ -2,7 +2,7 @@
 
 > **Project:** Adversarially-Safe Quantum-Classical System for Early Sepsis Detection  
 > **Team:** Yash Gautam (YG), Atul Kumar Mishra (AKM), Tanishk Viraj Bhanage (TVB)  
-> **Last Updated:** April 23, 2026
+> **Last Updated:** April 23, 2026 (with real MIMIC-IV results)
 
 ---
 
@@ -10,9 +10,9 @@
 
 - **All code is written** — 24 Python modules, ~5,400+ lines across data pipeline, models, agents, baselines, evaluation
 - **MIMIC-IV v3.1 downloaded** (9.9 GB) and **cohort extracted** (94,458 ICU stays, 12,972 sepsis = 13.7%)
-- **Feature extraction completed** → hourly_features.parquet (~56 MB)
-- **Pipeline is running autonomously** on the GPU server — preprocessing → windowing → LSTM training → baselines
-- **Your job as teammate:** SSH into the GPU server, check if training is done, collect metrics, and proceed to Phase 2 (quantum kernel integration)
+- **Full Phase 1 pipeline completed on GPU server** — cohort → features → preprocessing → windowing → LSTM training → baselines
+- **Real results obtained:** LSTM test AUROC = 0.7891, XGBoost test AUROC = 0.8038, SOFA test AUROC = 0.5869
+- **Next:** Phase 2 — Quantum kernel integration using extracted LSTM embeddings
 
 ---
 
@@ -85,12 +85,21 @@ flowchart LR
 |-------|--------|-------------|---------|
 | Cohort Extraction | ✅ **DONE** | `data/processed/cohort.csv` | 94,458 ICU stays, 12,972 sepsis (13.7%) |
 | Feature Extraction | ✅ **DONE** | `data/processed/hourly_features.parquet` | 12 features × hourly, ~56 MB |
-| Preprocessing | 🔄 **Running** | `data/processed/{train,val,test}_features.parquet` | Imputation + normalization + split |
-| Windowing | ⏳ Queued | `data/processed/features.h5` | 6-hour sliding windows → HDF5 |
-| LSTM Training | ⏳ Queued | `checkpoints/lstm_best.pt` | BiLSTM on A100, target AUROC ≥ 0.80 |
-| Baselines | ⏳ Queued | `data/processed/pipeline_results_real.json` | XGBoost + SOFA comparisons |
+| Preprocessing | ✅ **DONE** | `data/processed/{train,val,test}_features.parquet` | Imputation + normalization + split |
+| Windowing | ✅ **DONE** | `data/processed/features.h5` | 6-hour sliding windows → HDF5 (~4.09M train windows) |
+| LSTM Training | ✅ **DONE** | `checkpoints/lstm_best.pt` | BiLSTM on A100, val AUROC = 0.7601 |
+| Embedding Extraction | ✅ **DONE** | `data/processed/lstm_embeddings.npz` | 16-dim embeddings for quantum kernel |
+| Baselines | ✅ **DONE** | `data/processed/pipeline_results_real.json` | XGBoost + SOFA comparisons |
 
-> **All stages run automatically in sequence** via the autonomous pipeline script on the GPU server.
+### 1.4 Real Data Results — Phase 1 Metrics
+
+| Model | Val AUROC | Test AUROC | Test AUPRC | Sensitivity@95%Spec |
+|-------|-----------|-----------|------------|---------------------|
+| **LSTM** | **0.7601** | **0.7891** | **0.0519** | **0.2997** |
+| **XGBoost** | — | **0.8038** | **0.0576** | — |
+| **SOFA Threshold** | — | **0.5869** | **0.0159** | — |
+
+> ⚠️ **Note on low AUPRC:** The windowed data has high class imbalance (~4.09M windows but low positive rate). This is expected for sliding-window approaches on per-hour prediction. The AUROC numbers are reasonable for Sepsis-3 prediction.
 
 ### 1.4 Technical Challenges Solved
 
@@ -271,7 +280,7 @@ Input: (batch, 6, 12)
 | Item | Value |
 |------|-------|
 | **SSH** | `ssh csegpuserver@172.16.18.2` |
-| **Password** | `Redhat#84@` |
+| **Password** | Ask team members (not stored in repo) |
 | **GPUs** | GPU 0: A100-40GB ✅, GPU 1: T400-2GB ❌, GPU 2: A100-40GB ✅ |
 | **CUDA** | 13.0 |
 | **PyTorch** | 2.11.0+cu130 |
@@ -285,98 +294,93 @@ Input: (batch, 6, 12)
 
 ## 6. 🚨 TEAMMATE: What You Need To Do Next
 
-### Step 1: Check if the pipeline finished
+### Step 1: Verify pipeline artifacts exist
 
 SSH into the server and check:
 
 ```bash
 ssh csegpuserver@172.16.18.2
-# Password: Redhat#84@
-
 cd ~/QuantumSepsis
 
-# Check what artifacts exist
-echo "=== ARTIFACTS ===" 
-ls -lh data/processed/cohort.csv 2>/dev/null && echo "cohort.csv: EXISTS" || echo "cohort.csv: MISSING"
-ls -lh data/processed/hourly_features.parquet 2>/dev/null && echo "hourly_features: EXISTS" || echo "hourly_features: MISSING"
-ls -lh data/processed/train_features.parquet 2>/dev/null && echo "train_features: EXISTS" || echo "train_features: MISSING"
-ls -lh data/processed/features.h5 2>/dev/null && echo "features.h5: EXISTS" || echo "features.h5: MISSING"
-ls -lh checkpoints/lstm_best.pt 2>/dev/null && echo "lstm_best.pt: EXISTS" || echo "lstm_best.pt: MISSING"
-ls -lh data/processed/lstm_embeddings.npz 2>/dev/null && echo "embeddings: EXISTS" || echo "embeddings: MISSING"
-ls -lh data/processed/pipeline_results_real.json 2>/dev/null && echo "results: EXISTS" || echo "results: MISSING"
+# All of these should exist:
+ls -lh data/processed/cohort.csv
+ls -lh data/processed/hourly_features.parquet
+ls -lh data/processed/features.h5
+ls -lh checkpoints/lstm_best.pt
+ls -lh data/processed/lstm_embeddings.npz
+ls -lh data/processed/pipeline_results_real.json
 
-# Check screen sessions
-screen -ls
-
-# Check if anything is still running
-ps aux | grep python3 | grep -v grep
-```
-
-### Step 2: Based on what exists, do the right thing
-
-**If `lstm_best.pt` EXISTS → Training is done! Collect metrics:**
-```bash
+# View the metrics:
 cat data/processed/pipeline_results_real.json
-# Or run baselines manually:
-cd ~/QuantumSepsis
-python3 scripts/run_real_baselines.py
 ```
 
-**If `features.h5` EXISTS but `lstm_best.pt` MISSING → Run training:**
+### Step 2: Current priority — Improve model performance
+
+XGBoost (0.8038) is currently beating LSTM (0.7891) on test AUROC. Options:
+
+**a) Hyperparameter tuning for LSTM:**
 ```bash
-screen -S train
-cd ~/QuantumSepsis
+# Try with higher learning rate or different architecture
 CUDA_VISIBLE_DEVICES=0 python3 -m src.training.train_lstm --data data/processed/features.h5
-# Ctrl+A, D to detach
 ```
 
-**If `train_features.parquet` EXISTS but `features.h5` MISSING → Run windowing:**
-```bash
-screen -S window
-cd ~/QuantumSepsis
-python3 scripts/run_windowing_real.py
-# Then after it finishes, run training (above)
+**b) Check class imbalance in windows:**
+```python
+import h5py
+with h5py.File('data/processed/features.h5', 'r') as f:
+    for split in ['train', 'val', 'test']:
+        y = f[f'y_{split}'][:]
+        print(f"{split}: total={len(y)}, pos={y.sum()}, rate={y.mean():.4f}")
 ```
 
-**If `hourly_features.parquet` EXISTS but `train_features.parquet` MISSING → Run preprocessing:**
-```bash
-cd ~/QuantumSepsis
-python3 -m src.data.preprocessing \
-    --features data/processed/hourly_features.parquet \
-    --cohort data/processed/cohort.csv
-# Then run windowing, then training
+### Step 3: Quantum Kernel Integration (Phase 2)
+
+> ⚠️ **IMPORTANT:** The current `quantum_kernel.py` cannot run on ~4.09M training windows. A precomputed kernel matrix would be 4M × 4M = 16 trillion entries. **You must subsample.**
+
+**Approach: Subsample for kernel computation**
+```python
+import numpy as np
+
+# Load embeddings
+data = np.load('data/processed/lstm_embeddings.npz')
+X_train, y_train = data['X_train'], data['y_train']
+
+# Subsample to ~2000-5000 samples (balanced)
+from sklearn.utils import resample
+pos_idx = np.where(y_train == 1)[0]
+neg_idx = np.where(y_train == 0)[0]
+n_sample = min(2500, len(pos_idx))
+pos_sample = resample(pos_idx, n_samples=n_sample, random_state=42)
+neg_sample = resample(neg_idx, n_samples=n_sample, random_state=42)
+idx = np.concatenate([pos_sample, neg_sample])
+X_sub, y_sub = X_train[idx], y_train[idx]
+
+# PCA 16 → 8, then quantum kernel
+from sklearn.decomposition import PCA
+pca = PCA(n_components=8)
+X_pca = pca.fit_transform(X_sub)
+
+# Now run quantum kernel on X_pca (5000 × 8 matrix — feasible)
 ```
 
-**If something crashed → Check logs:**
-```bash
-tail -50 ~/QuantumSepsis/pipeline_autonomous.log 2>/dev/null
-tail -50 ~/QuantumSepsis/logs/lstm_training.log 2>/dev/null
-```
+The quantum kernel module needs to be refactored to handle this subsampling approach. It should:
+1. Load embeddings from `lstm_embeddings.npz`
+2. Subsample to ~2000-5000 balanced samples
+3. PCA 16 → 8 dimensions
+4. Compute kernel matrix K(x,y) = |⟨Φ(x)|Φ(y)⟩|²
+5. Train QSVM on the subsampled data
+6. Evaluate on full test set using precomputed kernel rows
 
-### Step 3: After LSTM training is done → Run Phase 2
+### Step 4: Record final metrics
 
-**Run baselines if not already done:**
-```bash
-python3 scripts/run_real_baselines.py
-```
-
-**Start Quantum Kernel Integration:**
-```bash
-cd ~/QuantumSepsis
-python3 -m src.models.quantum_kernel
-```
-This uses `data/processed/lstm_embeddings.npz` → PCA to 8 dims → ZZFeatureMap → QSVM.
-
-### Step 4: Record and report metrics
-
-You should get a table like:
+After quantum kernel runs, collect and report:
 
 | Model | Test AUROC | Test AUPRC | Sensitivity@95%Spec |
 |-------|-----------|------------|---------------------|
-| SOFA Threshold | 0.65–0.70 | 0.30–0.40 | — |
-| XGBoost | 0.78–0.82 | 0.55–0.65 | — |
-| Classical LSTM | 0.80–0.84 | 0.60–0.70 | TBD |
-| **QuantumSepsis Shield** | **≥ 0.85** | **≥ 0.70** | **TBD** |
+| SOFA Threshold | 0.5869 | 0.0159 | — |
+| XGBoost | 0.8038 | 0.0576 | — |
+| Classical LSTM | 0.7891 | 0.0519 | 0.2997 |
+| **QuantumSepsis Shield** | **TBD** | **TBD** | **TBD** |
 
 ---
 
