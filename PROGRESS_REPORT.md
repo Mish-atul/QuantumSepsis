@@ -1,0 +1,438 @@
+# QuantumSepsis Shield — Progress Report & Teammate Handoff
+
+> **Project:** Adversarially-Safe Quantum-Classical System for Early Sepsis Detection  
+> **Team:** Yash Gautam (YG), Atul Kumar Mishra (AKM), Tanishk Viraj Bhanage (TVB)  
+> **Last Updated:** April 23, 2026
+
+---
+
+## ⚡ Quick Summary (TL;DR)
+
+- **All code is written** — 24 Python modules, ~5,400+ lines across data pipeline, models, agents, baselines, evaluation
+- **MIMIC-IV v3.1 downloaded** (9.9 GB) and **cohort extracted** (94,458 ICU stays, 12,972 sepsis = 13.7%)
+- **Feature extraction completed** → hourly_features.parquet (~56 MB)
+- **Pipeline is running autonomously** on the GPU server — preprocessing → windowing → LSTM training → baselines
+- **Your job as teammate:** SSH into the GPU server, check if training is done, collect metrics, and proceed to Phase 2 (quantum kernel integration)
+
+---
+
+## 1. What Has Been Done ✅
+
+### 1.1 Infrastructure Setup
+| Task | Status | Details |
+|------|--------|---------|
+| GitHub repo created | ✅ Done | https://github.com/Mish-atul/QuantumSepsis |
+| GPU server access | ✅ Done | `ssh csegpuserver@172.16.18.2` (password: `Redhat#84@`) |
+| GPU verification | ✅ Done | 2× NVIDIA A100-PCIE-40GB, CUDA 13.0 |
+| Python environment | ✅ Done | PyTorch 2.11.0+cu130, all deps installed via `pip3 install --user` |
+| MIMIC-IV v3.1 download | ✅ Done | 9.9 GB at `~/QuantumSepsis/data/raw/physionet.org/files/mimiciv/3.1/` |
+
+### 1.2 Code Implementation (ALL COMPLETE)
+
+```mermaid
+flowchart LR
+    subgraph Data Pipeline
+        A[cohort_extraction.py] --> B[feature_extraction.py]
+        B --> C[preprocessing.py]
+        C --> D[windowing.py]
+        D --> E[dataset.py]
+    end
+    
+    subgraph Models
+        F[lstm.py]
+        G[losses.py]
+        H[quantum_kernel.py]
+        I[conformal.py]
+    end
+    
+    subgraph Agents
+        J[red_team.py]
+        K[orchestrator.py]
+        L[outcome_learner.py]
+    end
+    
+    subgraph Baselines
+        M[xgboost_baseline.py]
+        N[sofa_baseline.py]
+    end
+    
+    subgraph Evaluation
+        O[metrics.py]
+    end
+    
+    style A fill:#4CAF50,color:#fff
+    style B fill:#4CAF50,color:#fff
+    style C fill:#4CAF50,color:#fff
+    style D fill:#4CAF50,color:#fff
+    style E fill:#4CAF50,color:#fff
+    style F fill:#4CAF50,color:#fff
+    style G fill:#4CAF50,color:#fff
+    style H fill:#4CAF50,color:#fff
+    style I fill:#4CAF50,color:#fff
+    style J fill:#4CAF50,color:#fff
+    style K fill:#4CAF50,color:#fff
+    style L fill:#4CAF50,color:#fff
+    style M fill:#4CAF50,color:#fff
+    style N fill:#4CAF50,color:#fff
+    style O fill:#4CAF50,color:#fff
+```
+
+> **All 24 Python modules are fully implemented and tested with synthetic data.**
+
+### 1.3 Real Data Processing (ON MIMIC-IV)
+
+| Stage | Status | Output File | Details |
+|-------|--------|-------------|---------|
+| Cohort Extraction | ✅ **DONE** | `data/processed/cohort.csv` | 94,458 ICU stays, 12,972 sepsis (13.7%) |
+| Feature Extraction | ✅ **DONE** | `data/processed/hourly_features.parquet` | 12 features × hourly, ~56 MB |
+| Preprocessing | 🔄 **Running** | `data/processed/{train,val,test}_features.parquet` | Imputation + normalization + split |
+| Windowing | ⏳ Queued | `data/processed/features.h5` | 6-hour sliding windows → HDF5 |
+| LSTM Training | ⏳ Queued | `checkpoints/lstm_best.pt` | BiLSTM on A100, target AUROC ≥ 0.80 |
+| Baselines | ⏳ Queued | `data/processed/pipeline_results_real.json` | XGBoost + SOFA comparisons |
+
+> **All stages run automatically in sequence** via the autonomous pipeline script on the GPU server.
+
+### 1.4 Technical Challenges Solved
+
+**Problem: Out-of-Memory (OOM) Crash**
+- `labevents` (124M rows) and `chartevents` (330M rows) crashed when loaded fully into RAM
+- **Solution:** Created `cohort_extraction_optimized.py` with chunked CSV reading (500K rows/chunk, filter inline)
+- Memory usage: 30 GB → 2-3 GB
+
+**Problem: NaN Timestamp Crash**
+- Feature extraction crashed on ICU stays with missing `intime`/`outtime`
+- **Solution:** Added guard to skip stays with invalid timestamps
+
+---
+
+## 2. System Architecture Overview
+
+### 2.1 Five-Layer Pipeline
+
+```mermaid
+flowchart LR
+    A["Layer 1\nMonitoring\nAgents"] --> B["Layer 2\nBiLSTM\nEncoder"]
+    B --> C["Layer 3\nQuantum\nKernel"]
+    C --> D["Layer 4a\nConformal\nPrediction"]
+    A --> E["Layer 4b\nRed Team\nAgent"]
+    D --> F["Layer 5\nOrchestrator"]
+    E --> F
+    
+    style A fill:#4CAF50,color:#fff
+    style B fill:#2196F3,color:#fff
+    style C fill:#9C27B0,color:#fff
+    style D fill:#FF9800,color:#fff
+    style E fill:#f44336,color:#fff
+    style F fill:#607D8B,color:#fff
+```
+
+| Layer | Component | Input | Output |
+|-------|-----------|-------|--------|
+| 1 | Monitoring Agents | Raw vitals/labs | `(6, 12)` normalized window |
+| 2 | BiLSTM Encoder | `(6, 12)` window | `(16,)` embedding + risk score |
+| 3 | Quantum Kernel | `(16,)` → PCA → `(8,)` | Quantum risk score [0,1] |
+| 4a | Conformal Prediction | Risk score | (score, lower, upper) at 90% coverage |
+| 4b | Red Team Agent | Raw vitals window | Tripwire alerts (non-overridable) |
+| 5 | Orchestrator | All above | GREEN/AMBER/RED/CRITICAL + actions |
+
+### 2.2 Data Processing Flow
+
+```mermaid
+flowchart TD
+    RAW["MIMIC-IV v3.1\n(Raw CSVs)"] --> CE["Cohort Extraction\n(Sepsis-3 Criteria)"]
+    CE --> |"cohort.csv\n94,458 ICU stays\n13.7% sepsis"|FE["Feature Extraction\n(12 vitals/labs per hour)"]
+    FE --> |"hourly_features.parquet\n~56 MB"|PP["Preprocessing\n(Impute + Normalize + Split)"]
+    PP --> |"train/val/test.parquet"|WN["Windowing\n(6-hour sliding windows)"]
+    WN --> |"features.h5\n(N, 6, 12) tensors"|TR["LSTM Training\n(A100 GPU)"]
+    TR --> |"lstm_best.pt"|EMB["Embedding Extraction"]
+    EMB --> |"lstm_embeddings.npz\n(N, 16)"|QK["Quantum Kernel\n(PCA 16→8 → ZZFeatureMap → QSVM)"]
+    
+    style CE fill:#4CAF50,color:#fff
+    style FE fill:#4CAF50,color:#fff
+    style PP fill:#FF9800,color:#fff
+    style WN fill:#ccc
+    style TR fill:#ccc
+    style EMB fill:#ccc
+    style QK fill:#ccc
+```
+
+---
+
+## 3. Dataset Details
+
+### 3.1 MIMIC-IV v3.1
+
+| Property | Value |
+|----------|-------|
+| Dataset | Medical Information Mart for Intensive Care IV |
+| Version | 3.1 (Latest) |
+| Source | PhysioNet, Beth Israel Deaconess Medical Center |
+| Data Period | 2008–2022 (de-identified) |
+| Total Patients | 364,627 |
+| Hospitalizations | 546,028 |
+| **ICU Stays** | **94,458** |
+| Download Size | ~9.9 GB compressed |
+
+### 3.2 Tables Processed
+
+```mermaid
+erDiagram
+    PATIENTS ||--o{ ADMISSIONS : "subject_id"
+    ADMISSIONS ||--o{ ICUSTAYS : "hadm_id"
+    ICUSTAYS ||--o{ CHARTEVENTS : "stay_id"
+    ADMISSIONS ||--o{ LABEVENTS : "hadm_id"
+    ADMISSIONS ||--o{ PRESCRIPTIONS : "hadm_id"
+    ADMISSIONS ||--o{ MICROBIOLOGYEVENTS : "hadm_id"
+
+    PATIENTS { int subject_id PK }
+    ADMISSIONS { int hadm_id PK }
+    ICUSTAYS { int stay_id PK }
+    CHARTEVENTS { int stay_id FK }
+    LABEVENTS { int hadm_id FK }
+    PRESCRIPTIONS { int hadm_id FK }
+    MICROBIOLOGYEVENTS { int hadm_id FK }
+```
+
+| Table | Rows | Our Usage |
+|-------|------|-----------|
+| patients | 364,627 | Demographics |
+| admissions | 546,028 | Death timestamps |
+| icustays | 94,458 | ICU stay boundaries |
+| prescriptions | ~17M | Antibiotic orders → suspected infection |
+| microbiologyevents | ~600K | Cultures → suspected infection |
+| **labevents** | **~124M** | Lactate, WBC, Creatinine, Platelets |
+| **chartevents** | **~330M** | HR, BP, Temp, SpO2, RR, GCS |
+
+### 3.3 Cohort Statistics (Verified)
+
+| Metric | Value |
+|--------|-------|
+| Total ICU stays | 94,458 |
+| Sepsis-3 positive | 12,972 (13.7%) |
+| Sepsis-3 negative | 81,486 (86.3%) |
+
+### 3.4 12 Input Features
+
+| # | Feature | Source | Item IDs | Unit |
+|---|---------|--------|----------|------|
+| 1 | Heart Rate | chartevents | 211, 220045 | bpm |
+| 2 | SBP | chartevents | 51, 442, 455, 6701, 220179, 220050 | mmHg |
+| 3 | DBP | chartevents | 8368, 8440, 8441, 8555, 220180, 220051 | mmHg |
+| 4 | MAP | chartevents | 52, 456, 6702, 220052, 220181 | mmHg |
+| 5 | Temperature | chartevents | 223762, 226329 | °C |
+| 6 | Resp Rate | chartevents | 615, 618, 220210, 224690 | br/min |
+| 7 | SpO2 | chartevents | 646, 220277 | % |
+| 8 | GCS Total | chartevents | 198, 226755, 227013 | score |
+| 9 | Lactate | labevents | 50813 | mmol/L |
+| 10 | WBC | labevents | 51301 | K/uL |
+| 11 | Creatinine | labevents | 50912 | mg/dL |
+| 12 | Platelets | labevents | 51265 | K/uL |
+
+---
+
+## 4. Model Architecture
+
+### 4.1 LSTM Encoder
+
+```
+Input: (batch, 6, 12)
+  → LayerNorm([6, 12])
+  → BiLSTM(input=12, hidden=128, layers=2, dropout=0.3)  → (batch, 6, 256)
+  → TemporalAttention(256, attn_dim=64)                   → (batch, 256)
+  → FC(256 → 64, ReLU, Dropout)
+  → FC(64 → 16, Tanh)                                     → embedding (batch, 16)
+  → FC(16 → 1, Sigmoid)                                   → risk_score (batch,)
+```
+
+**Parameters:** ~420K | **Loss:** Asymmetric Focal Loss (FN ≈ 9× FP penalty)
+
+### 4.2 Quantum Kernel
+
+| Parameter | Value |
+|-----------|-------|
+| Qubits | 8 (PCA-reduced from 16) |
+| Feature Map | ZZFeatureMap |
+| Entanglement | Linear |
+| Repetitions | 2 |
+| Backend | Qiskit AerSimulator (1024 shots) |
+
+### 4.3 Three Novel Contributions
+
+| # | Name | Innovation |
+|---|------|------------|
+| N1 | **QCCP** | Conformal prediction with quantum kernel nonconformity scores |
+| N2 | **Adversarial Safety** | Red Team tripwires + adaptive loss from safety violations |
+| N3 | **Confidence-Gated Fast-Tracking** | Skip preliminary diagnostics when confidence is high |
+
+---
+
+## 5. GPU Server Reference
+
+| Item | Value |
+|------|-------|
+| **SSH** | `ssh csegpuserver@172.16.18.2` |
+| **Password** | `Redhat#84@` |
+| **GPUs** | GPU 0: A100-40GB ✅, GPU 1: T400-2GB ❌, GPU 2: A100-40GB ✅ |
+| **CUDA** | 13.0 |
+| **PyTorch** | 2.11.0+cu130 |
+| **Python** | 3.10.12 (system, use `pip3 install --user`) |
+| **Project Path** | `~/QuantumSepsis/` |
+| **Data Path** | `~/QuantumSepsis/data/raw/physionet.org/files/mimiciv/3.1/` |
+| **Always use** | `screen` sessions (VPN drops kill SSH) |
+| **For training** | `CUDA_VISIBLE_DEVICES=0` or `=2` (skip GPU 1) |
+
+---
+
+## 6. 🚨 TEAMMATE: What You Need To Do Next
+
+### Step 1: Check if the pipeline finished
+
+SSH into the server and check:
+
+```bash
+ssh csegpuserver@172.16.18.2
+# Password: Redhat#84@
+
+cd ~/QuantumSepsis
+
+# Check what artifacts exist
+echo "=== ARTIFACTS ===" 
+ls -lh data/processed/cohort.csv 2>/dev/null && echo "cohort.csv: EXISTS" || echo "cohort.csv: MISSING"
+ls -lh data/processed/hourly_features.parquet 2>/dev/null && echo "hourly_features: EXISTS" || echo "hourly_features: MISSING"
+ls -lh data/processed/train_features.parquet 2>/dev/null && echo "train_features: EXISTS" || echo "train_features: MISSING"
+ls -lh data/processed/features.h5 2>/dev/null && echo "features.h5: EXISTS" || echo "features.h5: MISSING"
+ls -lh checkpoints/lstm_best.pt 2>/dev/null && echo "lstm_best.pt: EXISTS" || echo "lstm_best.pt: MISSING"
+ls -lh data/processed/lstm_embeddings.npz 2>/dev/null && echo "embeddings: EXISTS" || echo "embeddings: MISSING"
+ls -lh data/processed/pipeline_results_real.json 2>/dev/null && echo "results: EXISTS" || echo "results: MISSING"
+
+# Check screen sessions
+screen -ls
+
+# Check if anything is still running
+ps aux | grep python3 | grep -v grep
+```
+
+### Step 2: Based on what exists, do the right thing
+
+**If `lstm_best.pt` EXISTS → Training is done! Collect metrics:**
+```bash
+cat data/processed/pipeline_results_real.json
+# Or run baselines manually:
+cd ~/QuantumSepsis
+python3 scripts/run_real_baselines.py
+```
+
+**If `features.h5` EXISTS but `lstm_best.pt` MISSING → Run training:**
+```bash
+screen -S train
+cd ~/QuantumSepsis
+CUDA_VISIBLE_DEVICES=0 python3 -m src.training.train_lstm --data data/processed/features.h5
+# Ctrl+A, D to detach
+```
+
+**If `train_features.parquet` EXISTS but `features.h5` MISSING → Run windowing:**
+```bash
+screen -S window
+cd ~/QuantumSepsis
+python3 scripts/run_windowing_real.py
+# Then after it finishes, run training (above)
+```
+
+**If `hourly_features.parquet` EXISTS but `train_features.parquet` MISSING → Run preprocessing:**
+```bash
+cd ~/QuantumSepsis
+python3 -m src.data.preprocessing \
+    --features data/processed/hourly_features.parquet \
+    --cohort data/processed/cohort.csv
+# Then run windowing, then training
+```
+
+**If something crashed → Check logs:**
+```bash
+tail -50 ~/QuantumSepsis/pipeline_autonomous.log 2>/dev/null
+tail -50 ~/QuantumSepsis/logs/lstm_training.log 2>/dev/null
+```
+
+### Step 3: After LSTM training is done → Run Phase 2
+
+**Run baselines if not already done:**
+```bash
+python3 scripts/run_real_baselines.py
+```
+
+**Start Quantum Kernel Integration:**
+```bash
+cd ~/QuantumSepsis
+python3 -m src.models.quantum_kernel
+```
+This uses `data/processed/lstm_embeddings.npz` → PCA to 8 dims → ZZFeatureMap → QSVM.
+
+### Step 4: Record and report metrics
+
+You should get a table like:
+
+| Model | Test AUROC | Test AUPRC | Sensitivity@95%Spec |
+|-------|-----------|------------|---------------------|
+| SOFA Threshold | 0.65–0.70 | 0.30–0.40 | — |
+| XGBoost | 0.78–0.82 | 0.55–0.65 | — |
+| Classical LSTM | 0.80–0.84 | 0.60–0.70 | TBD |
+| **QuantumSepsis Shield** | **≥ 0.85** | **≥ 0.70** | **TBD** |
+
+---
+
+## 7. Codebase Structure
+
+```
+QuantumSepsis/
+├── src/
+│   ├── config.py                           # All hyperparameters
+│   ├── data/
+│   │   ├── cohort_extraction.py            # Original (OOM on real data)
+│   │   ├── cohort_extraction_optimized.py  # ✅ Memory-safe version
+│   │   ├── feature_extraction.py           # ✅ 12 features/hour
+│   │   ├── preprocessing.py                # ✅ Impute + normalize + split
+│   │   ├── windowing.py                    # ✅ 6h windows → HDF5
+│   │   └── dataset.py                      # ✅ PyTorch DataLoaders
+│   ├── models/
+│   │   ├── lstm.py                         # ✅ BiLSTM + Temporal Attention
+│   │   ├── losses.py                       # ✅ Asymmetric Focal Loss
+│   │   ├── quantum_kernel.py               # ✅ ZZFeatureMap + QSVM
+│   │   └── conformal.py                    # ✅ Split Conformal + QCCP
+│   ├── training/
+│   │   └── train_lstm.py                   # ✅ Full training pipeline
+│   ├── agents/
+│   │   ├── red_team.py                     # ✅ Clinical tripwires
+│   │   ├── orchestrator.py                 # ✅ Decision fusion
+│   │   └── outcome_learner.py              # ✅ Adaptive thresholds
+│   ├── baselines/
+│   │   ├── xgboost_baseline.py             # ✅ XGBoost comparison
+│   │   └── sofa_baseline.py                # ✅ SOFA threshold
+│   └── evaluation/
+│       └── metrics.py                      # ✅ AUROC, AUPRC, etc.
+├── scripts/
+│   ├── run_windowing_real.py               # ✅ Real-data windowing runner
+│   ├── run_real_baselines.py               # ✅ Metric comparison script
+│   └── run_pipeline_autonomous.sh          # ✅ Auto pipeline orchestrator
+├── files/
+│   ├── architecture.md                     # Full 5-layer spec
+│   ├── dataset.md                          # MIMIC-IV reference
+│   ├── novelty.md                          # 3 novelty claims
+│   ├── baseline_comparison.md              # Comparison plan
+│   └── roadmap.md                          # 12-week roadmap
+├── IMPLEMENTATION_PLAN.md                  # Detailed execution plan
+├── PROGRESS_REPORT.md                      # This file
+├── README.md                               # Project overview
+└── requirements.txt                        # Python dependencies
+```
+
+---
+
+## 8. References
+
+1. Singer et al. (2016). Sepsis-3 Definitions. *JAMA* 315(8):801-810.
+2. Kumar et al. (2006). Duration of hypotension in septic shock. *Crit Care Med* 34(6):1589-96.
+3. Havlíček et al. (2019). Quantum-enhanced feature spaces. *Nature* 567:209-212.
+4. Schuld & Killoran (2019). Quantum ML in Feature Hilbert Spaces. *PRL* 122:040504.
+5. Vovk et al. (2005). *Algorithmic Learning in a Random World.* Springer.
+6. Lin et al. (2017). Focal Loss. *ICCV 2017*.
+7. Johnson et al. (2023). MIMIC-IV. *PhysioNet*. DOI: 10.13026/6mm1-ek67.
