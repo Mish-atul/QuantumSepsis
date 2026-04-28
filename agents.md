@@ -599,3 +599,46 @@ orchestrator:
 7. **RBF gamma bug (fixed):** Earlier version recomputed gamma from prediction matrix instead of reusing training gamma → inconsistent kernels → AUROC 0.44. Fixed: always store and reuse `self.rbf_gamma_`.
 
 8. **Shared server:** Check `nvidia-smi` before training. Don't kill other users' screen sessions.
+
+---
+
+## 14. Phase 2 — Pipeline Scripts & Tests (Implemented April 29, 2026)
+
+### Runner Scripts (all support `--synthetic` for local testing)
+
+| Script | What it does | Output |
+|--------|-------------|--------|
+| `scripts/run_conformal_calibration.py` | Calibrates q_alpha on LSTM val scores, verifies ≥90% coverage on test | `conformal_calibration.json`, `conformal_test_intervals.npz` |
+| `scripts/run_e2e_validation.py` | Wires LSTM + Conformal + RedTeam + Orchestrator on test set | `e2e_validation_results.json`, `e2e_decisions.npz` |
+| `scripts/run_outcome_learning_simulation.py` | Feeds decisions into OutcomeLearningAgent, tracks FN/near-misses | `outcome_learning_results.json`, `near_miss_weights.json` |
+| `scripts/analyze_class_imbalance.py` | Investigates why AUPRC=0.05, focal gamma sensitivity | `class_imbalance_analysis.json` |
+| `scripts/run_lstm_tuning.py` | 5 tuning experiments to beat XGBoost 0.8038 | `tuning_results.json` per experiment |
+
+### Test Suite (31 edge case tests)
+
+| Test File | Tests | Covers |
+|-----------|-------|--------|
+| `tests/test_conformal_calibration.py` | 14 | Coverage guarantee, extreme labels (0%/100%), boundary clipping, batch consistency |
+| `tests/test_e2e_validation.py` | 17 | Full pipeline, missing files, wide/zero q_alpha, alert distribution math, norm stats |
+
+### E2E Validation — 5-Step Pipeline
+
+```
+Step 1: load_conformal_predictor() + load_norm_stats() + load_model()
+Step 2: run_inference() → risk_scores (N,) + windows (N,6,12) + labels (N,)
+Step 3: run_red_team() → N RedTeamAssessment objects (CRITICAL/AMBER/WATCH)
+Step 4: run_orchestrator() → N OrchestratorDecision objects + alert_labels array
+Step 5: compute_metrics() → sensitivity, specificity, F1, AUROC, AUPRC, fn_at_watch
+```
+
+### GPU Server Run Order
+
+```bash
+# After LSTM training is complete:
+python3 scripts/run_conformal_calibration.py        # Step 1
+python3 scripts/run_e2e_validation.py               # Step 2
+python3 scripts/run_outcome_learning_simulation.py   # Step 3
+python3 scripts/analyze_class_imbalance.py           # Step 4
+CUDA_VISIBLE_DEVICES=0 python3 scripts/run_lstm_tuning.py --exp exp5_combined  # Step 5
+```
+

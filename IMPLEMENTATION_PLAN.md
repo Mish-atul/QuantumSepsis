@@ -478,7 +478,7 @@ screen -X -S 368031 quit
 
 ---
 
-## 10. Summary of What Needs To Be Done
+## 10. Summary — Current Status (Updated April 29, 2026)\n\n> **Phase 1 (data pipeline + LSTM + baselines) and Phase 2 (conformal calibration, E2E validation, outcome learning, class imbalance analysis, LSTM tuning) are ALL COMPLETE.** Scripts written, tested (31 edge cases), and pushed to GitHub. Remaining: run Phase 2 scripts on GPU server, LSTM tuning experiments, retrieve Qiskit quantum kernel results, stay-level metrics, QCCP integration, visualization script.
 
 | # | Task | Est. Time | Blocker |
 |---|------|-----------|---------|
