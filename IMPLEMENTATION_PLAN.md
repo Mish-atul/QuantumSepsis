@@ -12,7 +12,7 @@
 ```
 Host: 172.16.18.2
 User: csegpuserver
-Password: [ask team members — not stored in repo]
+Password: Redhat#84@
 Command: ssh csegpuserver@172.16.18.2
 ```
 
@@ -41,7 +41,8 @@ Command: ssh csegpuserver@172.16.18.2
 
 ### PhysioNet Credentials
 ```
-Credentials: [ask team members — not stored in repo]
+Username: nityankulkarni28
+Password: Nitya@123
 ```
 
 ### Download Status: ✅ COMPLETE
