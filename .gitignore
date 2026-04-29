@@ -31,6 +31,10 @@ wheels/
 *.egg
 .pytest_cache/
 
+# Binary backup parts (never commit these — 100MB+ each)
+results_part_*
+*.tar.gz
+
 # IDEs
 .vscode/
 .idea/
