@@ -133,8 +133,13 @@ if auto_refresh:
 hour = int(time.time() / 60) % 24  # Simulate time progression
 window = generate_patient_window(scenario, hour)
 
-# Normalize (simplified - use actual normalization stats)
-window_norm = (window - window.mean(axis=0)) / (window.std(axis=0) + 1e-8)
+# Normalize using TRAINING SET statistics (not window's own stats!)
+norm_stats = json.load(open('data/processed/normalization_stats.json'))
+feature_names = ['heart_rate', 'sbp', 'dbp', 'map', 'temperature', 'resp_rate', 
+                 'spo2', 'gcs_total', 'lactate', 'wbc', 'creatinine', 'platelets']
+means = np.array([norm_stats['train_mean'][f] for f in feature_names])
+stds = np.array([norm_stats['train_std'][f] for f in feature_names])
+window_norm = (window - means) / (stds + 1e-8)
 
 # Run inference
 with torch.no_grad():
