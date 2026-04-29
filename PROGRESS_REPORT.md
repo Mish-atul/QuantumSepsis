@@ -2,7 +2,7 @@
 
 > **Project:** Adversarially-Safe Quantum-Classical System for Early Sepsis Detection  
 > **Team:** Yash Gautam (YG), Atul Kumar Mishra (AKM), Tanishk Viraj Bhanage (TVB)  
-> **Last Updated:** April 29, 2026
+> **Last Updated:** April 30, 2026
 
 ---
 
@@ -13,8 +13,10 @@
 - **Full Phase 1 pipeline completed on GPU server** — cohort → features → preprocessing → windowing → LSTM training → baselines
 - **Phase 2 scripts implemented** — conformal calibration, E2E orchestrator validation, outcome learning simulation, class imbalance analysis, LSTM tuning
 - **Real results obtained:** LSTM test AUROC = 0.7891, XGBoost test AUROC = 0.8038, SOFA test AUROC = 0.5869
-- **31 edge case tests** covering conformal prediction (14 tests) and E2E validation (17 tests)
-- **Next:** Run Phase 2 scripts on GPU server, retrieve Qiskit quantum kernel results, LSTM tuning
+- **Phase 3 validation complete:** Stay-level AUROC = **0.8618**, AUPRC = **0.5012** (7692 stays)
+- **E2E alert distribution:** 0% WATCH / 92.07% AMBER / 7.93% CRITICAL (FAST-TRACK 0)
+- **Conformal calibration:** q_alpha = 0.3923, FN at WATCH = 0
+- **LSTM tuning exp5_combined failed** (val AUROC 0.7583 < baseline 0.7601)
 
 ---
 
@@ -102,6 +104,18 @@ flowchart LR
 | **SOFA Threshold** | — | **0.5869** | **0.0159** | — |
 
 > ⚠️ **Note on low AUPRC:** The windowed data has high class imbalance (~4.09M windows but low positive rate). This is expected for sliding-window approaches on per-hour prediction. The AUROC numbers are reasonable for Sepsis-3 prediction.
+
+### 1.5 Phase 3 Results — E2E + Stay-Level
+
+| Metric | Value |
+|---|---|
+| **Stay-level AUROC** | **0.8618** |
+| **Stay-level AUPRC** | **0.5012** |
+| Stays evaluated | 7,692 (1,226 sepsis) |
+| **E2E alert distribution** | 0% WATCH · 92.07% AMBER · 7.93% CRITICAL |
+| FAST-TRACK | 0 (current config) |
+| Conformal q_alpha | 0.3923 |
+| FN at WATCH | 0 |
 
 ### 1.4 Technical Challenges Solved
 

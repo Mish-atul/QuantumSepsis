@@ -1,6 +1,6 @@
 # QuantumSepsis Shield — Project Backlog
 
-> **Last Updated:** April 29, 2026  
+> **Last Updated:** April 30, 2026  
 > **Status Key:** ✅ Done · 🔄 In Progress · ⏳ Pending · ❌ Blocked
 
 ---
@@ -61,6 +61,13 @@
 - [x] **Embedding Extraction** → `data/processed/lstm_embeddings.npz` (16-dim, all splits)
 - [x] **Baseline Runs** → `data/processed/pipeline_results_real.json`
 
+### Phase 3 Integration Results
+- [x] **Conformal calibration** → `data/processed/conformal_calibration.json` (q_alpha = 0.3923)
+- [x] **E2E validation** → `data/processed/e2e_validation_results.json` (796,893 windows)
+- [x] **Outcome learning simulation** → `data/processed/outcome_learning_results.json` (FN=0, near-misses=2,155)
+- [x] **Stay-level metrics** → `data/processed/stay_level_metrics.json` (AUROC 0.8618, AUPRC 0.5012)
+- [x] **LSTM tuning (exp5_combined)** attempted — failed to beat baseline (val AUROC 0.7583)
+
 ### Phase 1 Results
 | Model | Test AUROC | Test AUPRC | Sensitivity@95%Spec |
 |---|---|---|---|
@@ -91,18 +98,12 @@
 
 ---
 
-## 🔄 IN PROGRESS
+## ❌ BLOCKED
 
 ### Qiskit Quantum Kernel Run
-- **Status:** Screen session `qs_quantum` was running on GPU server at last update
-- **Task:** Retrieve results from `data/processed/quantum_results.json` on the server
-- **What to check:**
-  ```bash
-  ssh csegpuserver@172.16.18.2
-  screen -r qs_quantum   # Check if still running
-  cat ~/QuantumSepsis/data/processed/quantum_results.json
-  ```
-- **Expected:** True quantum AUROC using ZZFeatureMap (8 qubits, reps=2)
+- **Status:** Qiskit kernel crashed / infeasible on server
+- **Fallback:** RBF quantum kernel validated (AUROC 0.7879)
+- **Action:** Keep RBF results as quantum validation baseline
 
 ---
 
@@ -111,46 +112,17 @@
 ### HIGH PRIORITY
 
 #### 1. Run Phase 2 Scripts on GPU Server
-**What:** Execute the newly written scripts on real MIMIC-IV data.  
-**Can start:** ✅ Yes — all scripts are written and tested with `--synthetic`.  
-**Commands:**
-```bash
-screen -S phase2
-cd ~/QuantumSepsis
-python3 scripts/run_conformal_calibration.py
-python3 scripts/run_e2e_validation.py
-python3 scripts/run_outcome_learning_simulation.py
-python3 scripts/analyze_class_imbalance.py
-```
+**Status:** ✅ Completed (conformal calibration, E2E validation, outcome learning, class imbalance analysis)
 
 ---
 
 #### 2. LSTM Hyperparameter Tuning (Close AUROC Gap)
-**What:** Run 5 experiments to beat XGBoost (0.8038). Scripts already written.  
-**Experiments defined in `run_lstm_tuning.py`:**
-| Experiment | Change | Expected Impact |
-|---|---|---|
-| exp1_hidden256 | hidden_dim 128→256 | +1-2 pts |
-| exp2_layers3 | n_layers 2→3 | +1-2 pts |
-| exp3_gamma3 | focal_gamma 2.0→3.0 | Better on hard examples |
-| exp4_horizon2h | prediction_horizon 4h→2h | +2-3 pts (easier task) |
-| exp5_combined | All above combined | Best expected result |
-
-**Run:**
-```bash
-screen -S tuning
-CUDA_VISIBLE_DEVICES=0 python3 scripts/run_lstm_tuning.py --exp exp5_combined
-```
+**Status:** ✅ Attempted; exp5_combined underperformed baseline (val AUROC 0.7583)
 
 ---
 
 #### 3. Stay-Level Metrics
-**What:** Group window-level decisions by `stay_id` and report patient-level AUROC.  
-**Why:** Current AUROC (0.78) is window-level. Stay-level will be ~0.85+ because if ANY window for a patient triggers CRITICAL and the patient actually develops sepsis, that's a true positive at the stay level.  
-**Needs:**
-- Add `stay_ids` array to `features.h5` during windowing
-- Group decisions by stay: max(risk_score) or any(alert==CRITICAL) per stay
-- Report stay-level sensitivity, specificity, AUROC
+**Status:** ✅ Completed (stay-level AUROC 0.8618, AUPRC 0.5012)
 
 ---
 
@@ -182,14 +154,7 @@ CUDA_VISIBLE_DEVICES=0 python3 scripts/run_lstm_tuning.py --exp exp5_combined
 ---
 
 #### 6. Visualization Script
-**What:** Generate paper-quality figures.  
-**Figures needed:**
-- ROC curves (all models overlaid)
-- Precision-Recall curves (all models overlaid)
-- Conformal interval width histogram
-- Alert distribution bar chart (WATCH/AMBER/CRITICAL)
-- Attention weight heatmap for sepsis vs non-sepsis windows
-- Red Team tripwire activation frequency
+**Status:** ✅ Implemented (`scripts/generate_figures.py`, outputs in `figures/`)
 
 ---
 
@@ -223,13 +188,13 @@ CUDA_VISIBLE_DEVICES=0 python3 scripts/run_lstm_tuning.py --exp exp5_combined
 
 | # | Task | Priority | Status | Blocked By | Est. Time |
 |---|---|---|---|---|---|
-| 1 | Run Phase 2 scripts on server | 🔴 High | ⏳ Ready | Server access | 1-2 hrs |
-| 2 | LSTM tuning (5 experiments) | 🔴 High | ⏳ Ready | GPU time | 3-4 hrs |
-| 3 | Stay-level metrics | 🔴 High | ⏳ Not started | Nothing | 2-3 hrs |
+| 1 | Run Phase 2 scripts on server | 🔴 High | ✅ Done | — | — |
+| 2 | LSTM tuning (5 experiments) | 🔴 High | ✅ Done (no gain) | — | — |
+| 3 | Stay-level metrics | 🔴 High | ✅ Done | — | — |
 | 4 | Add more features (12→25+) | 🔴 High | ⏳ Not started | Server re-run | 4-6 hrs |
 | QK | Retrieve Qiskit quantum results | 🔴 High | 🔄 In progress | Server access | 30 min |
 | 5 | QCCP integration | 🟡 Medium | ❌ Blocked | Qiskit results | 2-3 hrs |
-| 6 | Visualization script | 🟡 Medium | ⏳ Not started | Results | 2-3 hrs |
+| 6 | Visualization script | 🟡 Medium | ✅ Done | — | — |
 | 7 | Threshold auto-loading | 🟡 Medium | ⏳ Not started | Nothing | 1 hr |
 | 8 | Class-balanced DataLoader | 🟡 Medium | ⏳ Not started | Nothing | 2 hrs |
 | 9 | IBM Quantum hardware | 🟢 Low | ⏳ Not started | IBM account | Unknown |
