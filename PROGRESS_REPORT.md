@@ -2,17 +2,19 @@
 
 > **Project:** Adversarially-Safe Quantum-Classical System for Early Sepsis Detection  
 > **Team:** Yash Gautam (YG), Atul Kumar Mishra (AKM), Tanishk Viraj Bhanage (TVB)  
-> **Last Updated:** April 23, 2026 (with real MIMIC-IV results)
+> **Last Updated:** April 29, 2026
 
 ---
 
 ## ⚡ Quick Summary (TL;DR)
 
-- **All code is written** — 24 Python modules, ~5,400+ lines across data pipeline, models, agents, baselines, evaluation
+- **All code is written** — 24 source modules + 5 Phase 2 scripts + 31 edge case tests (~8,000+ lines)
 - **MIMIC-IV v3.1 downloaded** (9.9 GB) and **cohort extracted** (94,458 ICU stays, 12,972 sepsis = 13.7%)
 - **Full Phase 1 pipeline completed on GPU server** — cohort → features → preprocessing → windowing → LSTM training → baselines
+- **Phase 2 scripts implemented** — conformal calibration, E2E orchestrator validation, outcome learning simulation, class imbalance analysis, LSTM tuning
 - **Real results obtained:** LSTM test AUROC = 0.7891, XGBoost test AUROC = 0.8038, SOFA test AUROC = 0.5869
-- **Next:** Phase 2 — Quantum kernel integration using extracted LSTM embeddings
+- **31 edge case tests** covering conformal prediction (14 tests) and E2E validation (17 tests)
+- **Next:** Run Phase 2 scripts on GPU server, retrieve Qiskit quantum kernel results, LSTM tuning
 
 ---
 
@@ -292,45 +294,77 @@ Input: (batch, 6, 12)
 
 ---
 
-## 6. 🚨 TEAMMATE: What You Need To Do Next
+## 6. Phase 2 — Post-LSTM Pipeline (NEW)
 
-### Step 1: Verify pipeline artifacts exist
+### 6.1 Scripts Implemented
 
-SSH into the server and check:
+All scripts support `--synthetic` flag for local testing without GPU or MIMIC-IV data.
+
+| Script | Purpose | Output |
+|--------|---------|--------|
+| `run_conformal_calibration.py` | Calibrate q_alpha on val scores, verify coverage ≥ 90% | `conformal_calibration.json` |
+| `run_e2e_validation.py` | Wire LSTM + Conformal + RedTeam + Orchestrator | `e2e_validation_results.json` |
+| `run_outcome_learning_simulation.py` | Adaptive threshold learning on decisions | `outcome_learning_results.json` |
+| `analyze_class_imbalance.py` | AUPRC investigation, gamma sensitivity | `class_imbalance_analysis.json` |
+| `run_lstm_tuning.py` | 5 experiments to beat XGBoost 0.8038 | `tuning_results.json` |
+
+### 6.2 E2E Validation Pipeline (5 Steps)
+
+```
+Step 1: Load LSTM checkpoint + conformal JSON (q_alpha) + normalization stats
+Step 2: Batched LSTM inference on test set → risk_scores + raw vitals windows
+Step 3: RedTeamAgent.evaluate() per window → tripwire assessments
+Step 4: Orchestrator.decide(risk, lower, upper, red_team) → WATCH/AMBER/CRITICAL/FAST-TRACK
+Step 5: Full metrics: sensitivity, specificity, F1, AUROC, AUPRC, fn_at_watch, alert distribution
+```
+
+### 6.3 LSTM Tuning Experiments
+
+| Experiment | Change | Goal |
+|---|---|---|
+| exp1_hidden256 | hidden_dim 128→256 | More capacity |
+| exp2_layers3 | n_layers 2→3 | Deeper BiLSTM |
+| exp3_gamma3 | focal_gamma 2.0→3.0 | Focus on hard examples |
+| exp4_horizon2h | prediction_horizon 4h→2h | Easier task, higher pos rate |
+| exp5_combined | All above combined | Best expected result |
+
+### 6.4 Edge Case Tests (31 total)
+
+**Conformal tests (14):** coverage guarantees, extreme labels (0%/100%), single sample, batch size consistency, boundary clipping.
+
+**E2E tests (17):** normal run, missing files (checkpoint/HDF5/JSON), all-zero/all-one labels, wide/zero q_alpha, norm stats with/without, confidence ranges, alert count math.
+
+---
+
+## 7. 🚨 TEAMMATE: What You Need To Do Next
+
+### Step 1: Run Phase 2 scripts on GPU server
 
 ```bash
 ssh csegpuserver@172.16.18.2
 cd ~/QuantumSepsis
+git pull   # Get latest Phase 2 scripts
 
-# All of these should exist:
-ls -lh data/processed/cohort.csv
-ls -lh data/processed/hourly_features.parquet
-ls -lh data/processed/features.h5
-ls -lh checkpoints/lstm_best.pt
-ls -lh data/processed/lstm_embeddings.npz
-ls -lh data/processed/pipeline_results_real.json
-
-# View the metrics:
-cat data/processed/pipeline_results_real.json
+# Run in order:
+screen -S phase2
+python3 scripts/run_conformal_calibration.py
+python3 scripts/run_e2e_validation.py
+python3 scripts/run_outcome_learning_simulation.py
+python3 scripts/analyze_class_imbalance.py
 ```
 
-### Step 2: Current priority — Improve model performance
+### Step 2: Run LSTM tuning
 
-XGBoost (0.8038) is currently beating LSTM (0.7891) on test AUROC. Options:
-
-**a) Hyperparameter tuning for LSTM:**
 ```bash
-# Try with higher learning rate or different architecture
-CUDA_VISIBLE_DEVICES=0 python3 -m src.training.train_lstm --data data/processed/features.h5
+screen -S tuning
+CUDA_VISIBLE_DEVICES=0 python3 scripts/run_lstm_tuning.py --exp exp5_combined
 ```
 
-**b) Check class imbalance in windows:**
-```python
-import h5py
-with h5py.File('data/processed/features.h5', 'r') as f:
-    for split in ['train', 'val', 'test']:
-        y = f[f'y_{split}'][:]
-        print(f"{split}: total={len(y)}, pos={y.sum()}, rate={y.mean():.4f}")
+### Step 3: Check Qiskit quantum kernel results
+
+```bash
+screen -r qs_quantum   # Check if still running
+cat ~/QuantumSepsis/data/processed/quantum_results.json
 ```
 
 ### Step 3: Quantum Kernel Integration (Phase 2) — ✅ **COMPLETED**
@@ -385,45 +419,46 @@ Final results after fixing the quantum kernel RBF bug and completing integration
 
 ---
 
-## 7. Codebase Structure
+## 8. Codebase Structure
 
 ```
 QuantumSepsis/
-├── src/
+├── src/                                    # 24 source modules
 │   ├── config.py                           # All hyperparameters
-│   ├── data/
-│   │   ├── cohort_extraction.py            # Original (OOM on real data)
-│   │   ├── cohort_extraction_optimized.py  # ✅ Memory-safe version
+│   ├── data/                               # Data pipeline (6 modules)
+│   │   ├── cohort_extraction_optimized.py  # ✅ Memory-safe Sepsis-3 extraction
 │   │   ├── feature_extraction.py           # ✅ 12 features/hour
 │   │   ├── preprocessing.py                # ✅ Impute + normalize + split
 │   │   ├── windowing.py                    # ✅ 6h windows → HDF5
 │   │   └── dataset.py                      # ✅ PyTorch DataLoaders
-│   ├── models/
+│   ├── models/                             # 4 model modules
 │   │   ├── lstm.py                         # ✅ BiLSTM + Temporal Attention
 │   │   ├── losses.py                       # ✅ Asymmetric Focal Loss
 │   │   ├── quantum_kernel.py               # ✅ ZZFeatureMap + QSVM
 │   │   └── conformal.py                    # ✅ Split Conformal + QCCP
-│   ├── training/
-│   │   └── train_lstm.py                   # ✅ Full training pipeline
-│   ├── agents/
-│   │   ├── red_team.py                     # ✅ Clinical tripwires
-│   │   ├── orchestrator.py                 # ✅ Decision fusion
-│   │   └── outcome_learner.py              # ✅ Adaptive thresholds
-│   ├── baselines/
+│   ├── training/train_lstm.py              # ✅ Full training pipeline
+│   ├── agents/                             # 3 safety agents
+│   │   ├── red_team.py                     # ✅ 5 clinical tripwires
+│   │   ├── orchestrator.py                 # ✅ Confidence-gated fusion
+│   │   └── outcome_learner.py              # ✅ Adaptive thresholds + near-miss
+│   ├── baselines/                          # 2 baselines
 │   │   ├── xgboost_baseline.py             # ✅ XGBoost comparison
 │   │   └── sofa_baseline.py                # ✅ SOFA threshold
-│   └── evaluation/
-│       └── metrics.py                      # ✅ AUROC, AUPRC, etc.
-├── scripts/
-│   ├── run_windowing_real.py               # ✅ Real-data windowing runner
-│   ├── run_real_baselines.py               # ✅ Metric comparison script
-│   └── run_pipeline_autonomous.sh          # ✅ Auto pipeline orchestrator
-├── files/
-│   ├── architecture.md                     # Full 5-layer spec
-│   ├── dataset.md                          # MIMIC-IV reference
-│   ├── novelty.md                          # 3 novelty claims
-│   ├── baseline_comparison.md              # Comparison plan
-│   └── roadmap.md                          # 12-week roadmap
+│   └── evaluation/metrics.py               # ✅ AUROC, AUPRC, etc.
+├── scripts/                                # 8 runner scripts
+│   ├── run_conformal_calibration.py        # ✅ Phase 2 — conformal intervals
+│   ├── run_e2e_validation.py               # ✅ Phase 2 — full pipeline validation
+│   ├── run_outcome_learning_simulation.py  # ✅ Phase 2 — feedback loop
+│   ├── analyze_class_imbalance.py          # ✅ Phase 2 — AUPRC investigation
+│   ├── run_lstm_tuning.py                  # ✅ Phase 2 — 5 tuning experiments
+│   ├── run_windowing_real.py               # ✅ Real-data windowing
+│   ├── run_real_baselines.py               # ✅ Metric comparison
+│   └── run_pipeline_autonomous.sh          # ✅ Auto pipeline
+├── tests/                                  # 31 edge case tests
+│   ├── test_conformal_calibration.py       # ✅ 14 tests
+│   └── test_e2e_validation.py              # ✅ 17 tests
+├── agents.md                               # Complete project knowledge base
+├── backlog.md                              # Done vs pending tracker
 ├── IMPLEMENTATION_PLAN.md                  # Detailed execution plan
 ├── PROGRESS_REPORT.md                      # This file
 ├── README.md                               # Project overview
@@ -432,7 +467,7 @@ QuantumSepsis/
 
 ---
 
-## 8. References
+## 9. References
 
 1. Singer et al. (2016). Sepsis-3 Definitions. *JAMA* 315(8):801-810.
 2. Kumar et al. (2006). Duration of hypotension in septic shock. *Crit Care Med* 34(6):1589-96.
