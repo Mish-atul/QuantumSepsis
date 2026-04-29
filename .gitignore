@@ -35,6 +35,10 @@ wheels/
 results_part_*
 *.tar.gz
 
+# Reference papers and extracted text (not project code)
+Integrating_Medical_Domain_Knowledge_*.pdf
+fuo_paper_text.txt
+
 # IDEs
 .vscode/
 .idea/
