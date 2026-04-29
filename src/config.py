@@ -149,7 +149,7 @@ class RedTeamConfig:
     hr_trend_threshold: float = 5.0 # bpm/hr
     rr_threshold: float = 20.0     # breaths/min
     map_threshold: float = 70.0    # mmHg
-    gcs_threshold: float = 14.0    # GCS score
+    gcs_threshold: float = 8.0     # GCS score (adjusted for ICU population, was 14.0)
     
     # Escalation
     critical_tripwire_count: int = 2  # >= 2 tripwires → CRITICAL
