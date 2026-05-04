@@ -39,6 +39,7 @@ class AsymmetricFocalLoss(nn.Module):
         alpha_pos: Weight for positive class (sepsis). Default 0.9.
         alpha_neg: Weight for negative class (non-sepsis). Default 0.1.
         gamma: Focusing parameter. Default 2.0.
+        label_smoothing: Label smoothing factor. Default 0.0.
         reduction: 'mean', 'sum', or 'none'. Default 'mean'.
     """
     
@@ -47,12 +48,14 @@ class AsymmetricFocalLoss(nn.Module):
         alpha_pos: float = 0.9,
         alpha_neg: float = 0.1,
         gamma: float = 2.0,
+        label_smoothing: float = 0.0,
         reduction: str = "mean",
     ):
         super().__init__()
         self.alpha_pos = alpha_pos
         self.alpha_neg = alpha_neg
         self.gamma = gamma
+        self.label_smoothing = label_smoothing
         self.reduction = reduction
     
     def forward(
@@ -72,6 +75,10 @@ class AsymmetricFocalLoss(nn.Module):
         # Ensure correct shape
         logits = logits.view(-1)
         targets = targets.view(-1).float()
+        
+        # Apply label smoothing
+        if self.label_smoothing > 0:
+            targets = targets * (1 - self.label_smoothing) + 0.5 * self.label_smoothing
         
         # Compute BCE loss per sample (numerically stable)
         bce_loss = F.binary_cross_entropy_with_logits(

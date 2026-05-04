@@ -58,8 +58,11 @@ def main():
 
     logger.info("Loading LSTM for standard conformal baseline...")
     lstm = SepsisLSTM(config.lstm)
-    ckpt = torch.load("checkpoints/lstm_best.pt", map_location="cpu")
-    lstm.load_state_dict(ckpt["model_state_dict"])
+    ckpt = torch.load("checkpoints/lstm_best.pt", map_location="cpu", weights_only=False)
+    if "model_state_dict" in ckpt:
+        lstm.load_state_dict(ckpt["model_state_dict"])
+    else:
+        lstm.load_state_dict(ckpt)
     lstm.eval()
 
     val_ds = SepsisDataset.from_hdf5("data/processed/features.h5", split="val")

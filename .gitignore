@@ -2,11 +2,21 @@
 venv/
 env/
 .env
+.venv/
 
 # Data and Logs (top-level only, not src/data/)
 /data/
 /logs/
 /checkpoints/
+
+# Temporary files
+*.sh
+*_STATUS.md
+MONITORING_GUIDE.md
+PHASE1_IMPROVEMENTS.md
+QUICKSTART.md
+CLAUDE.md
+backlog.md
 
 # Python
 __pycache__/
