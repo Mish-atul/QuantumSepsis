@@ -178,5 +178,120 @@ def verify_asymmetric_loss():
     print("\n[OK] Asymmetric property verified: FN >> FP")
 
 
+class MultiClassFocalLoss(nn.Module):
+    """Multi-class Focal Loss for FOU detection.
+
+    Extends focal loss to multi-class classification with per-class weights.
+
+    L(p, y) = -α_y · (1 - p_y)^γ · log(p_y)
+
+    Where:
+        - y is the true class (0-3 for FOU)
+        - p_y is the predicted probability for class y
+        - α_y is the class-specific weight
+        - γ is the focusing parameter
+
+    Args:
+        alpha: List of class weights [α_0, α_1, α_2, α_3]
+               Default: [0.1, 0.4, 0.3, 0.2] for [No FOU, Infectious, Non-infectious, Undiagnosed]
+        gamma: Focusing parameter. Default 2.0.
+        reduction: 'mean', 'sum', or 'none'. Default 'mean'.
+    """
+
+    def __init__(
+        self,
+        alpha: Optional[list] = None,
+        gamma: float = 2.0,
+        reduction: str = "mean",
+    ):
+        super().__init__()
+        if alpha is None:
+            alpha = [0.1, 0.4, 0.3, 0.2]  # Default for FOU
+        self.alpha = torch.tensor(alpha, dtype=torch.float32)
+        self.gamma = gamma
+        self.reduction = reduction
+
+    def forward(
+        self,
+        logits: torch.Tensor,
+        targets: torch.Tensor,
+    ) -> torch.Tensor:
+        """Compute multi-class focal loss.
+
+        Args:
+            logits: Raw model output (before softmax), shape (N, C) where C is number of classes
+            targets: Class labels, shape (N,) with values in [0, C-1]
+
+        Returns:
+            Loss value (scalar if reduction='mean' or 'sum')
+        """
+        # Ensure targets are long
+        targets = targets.long()
+
+        # Compute softmax probabilities
+        probs = F.softmax(logits, dim=1)  # (N, C)
+
+        # Get probability of true class for each sample
+        p_t = probs.gather(1, targets.unsqueeze(1)).squeeze(1)  # (N,)
+
+        # Get alpha for true class
+        alpha = self.alpha.to(logits.device)
+        alpha_t = alpha[targets]  # (N,)
+
+        # Focal modulating factor
+        focal_weight = (1 - p_t) ** self.gamma
+
+        # Cross-entropy loss
+        ce_loss = F.cross_entropy(logits, targets, reduction='none')
+
+        # Final loss
+        loss = alpha_t * focal_weight * ce_loss
+
+        if self.reduction == "mean":
+            return loss.mean()
+        elif self.reduction == "sum":
+            return loss.sum()
+        else:
+            return loss
+
+    def __repr__(self) -> str:
+        return (
+            f"MultiClassFocalLoss("
+            f"α={self.alpha.tolist()}, "
+            f"γ={self.gamma}, reduction='{self.reduction}')"
+        )
+
+
+def verify_multiclass_focal_loss():
+    """Verify multi-class focal loss."""
+    loss_fn = MultiClassFocalLoss(alpha=[0.1, 0.4, 0.3, 0.2], gamma=2.0)
+
+    # Test case: 4 samples, 4 classes
+    logits = torch.tensor([
+        [2.0, -1.0, -1.0, -1.0],  # Predicts class 0
+        [-1.0, 2.0, -1.0, -1.0],  # Predicts class 1
+        [-1.0, -1.0, 2.0, -1.0],  # Predicts class 2
+        [-1.0, -1.0, -1.0, 2.0],  # Predicts class 3
+    ])
+
+    # Case 1: All correct predictions
+    targets_correct = torch.tensor([0, 1, 2, 3])
+    loss_correct = loss_fn(logits, targets_correct)
+
+    # Case 2: All wrong predictions
+    targets_wrong = torch.tensor([1, 0, 3, 2])
+    loss_wrong = loss_fn(logits, targets_wrong)
+
+    print("Multi-class Focal Loss Verification:")
+    print(f"  Loss (correct predictions): {loss_correct.item():.4f}")
+    print(f"  Loss (wrong predictions):   {loss_wrong.item():.4f}")
+    print(f"  Wrong/Correct ratio:        {loss_wrong.item() / loss_correct.item():.1f}×")
+
+    assert loss_wrong > loss_correct, "Wrong predictions should have higher loss!"
+    print("\n[OK] Multi-class focal loss verified")
+
+
 if __name__ == "__main__":
     verify_asymmetric_loss()
+    print("\n" + "="*50 + "\n")
+    verify_multiclass_focal_loss()
