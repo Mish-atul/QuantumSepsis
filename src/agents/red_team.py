@@ -7,12 +7,15 @@ CANNOT be suppressed by ML model output.
 
 Tripwires:
   TW-TEMP:   Temperature < 36°C or > 38.3°C
-  TW-HR:     Heart Rate > 90 bpm AND upward trend
-  TW-RR:     Respiratory Rate > 20 breaths/min
-  TW-MAP:    MAP < 70 mmHg
-  TW-MENTAL: GCS < 14 (altered mental status)
+  TW-HR:     Heart Rate > 100 bpm (or > 130 with no trend required)
+  TW-RR:     Respiratory Rate > 22 breaths/min
+  TW-MAP:    MAP < 65 mmHg
+  TW-SPO2:   SpO2 < 92%
+  TW-LACTATE: Lactate > 2.0 mmol/L
+  TW-MENTAL: GCS < 13 (altered mental status)
 
 Escalation:
+  Any SINGLE extreme vital → CRITICAL (non-overridable)
   ≥ 2 tripwires active → CRITICAL (non-overridable)
   1 tripwire → AMBER
   0 tripwires → WATCH
@@ -147,15 +150,17 @@ class RedTeamAgent:
             clinical_reason="Hypothermia or fever (SIRS criterion)",
         ))
         
-        # TW-HR: Heart Rate with trend
+        # TW-HR: Heart Rate — fires on high value alone OR value + trend
         hr = latest[FEAT_IDX["heart_rate"]]
         hr_trend = self._compute_trend(vitals_window[:, FEAT_IDX["heart_rate"]])
+        hr_extreme = hr > 130  # Extreme tachycardia — always critical regardless of trend
+        hr_with_trend = (hr > self.config.hr_threshold and hr_trend > self.config.hr_trend_threshold)
         tripwires.append(TripwireResult(
             name="TW-HR",
-            triggered=(hr > self.config.hr_threshold and hr_trend > self.config.hr_trend_threshold),
+            triggered=hr_extreme or hr_with_trend,
             value=hr,
-            threshold=f"> {self.config.hr_threshold} bpm AND trend > {self.config.hr_trend_threshold} bpm/hr",
-            clinical_reason="Tachycardia with upward trend",
+            threshold=f"> 130 bpm (extreme) or > {self.config.hr_threshold} bpm + trend",
+            clinical_reason="Tachycardia" + (" (EXTREME)" if hr_extreme else " with upward trend"),
         ))
         
         # TW-RR: Respiratory Rate
@@ -178,6 +183,26 @@ class RedTeamAgent:
             clinical_reason="Hypotension (Sepsis-3 cardiovascular)",
         ))
         
+        # TW-SPO2: Oxygen saturation
+        spo2 = latest[FEAT_IDX["spo2"]]
+        tripwires.append(TripwireResult(
+            name="TW-SPO2",
+            triggered=spo2 < 92.0,
+            value=spo2,
+            threshold="< 92%",
+            clinical_reason="Hypoxemia (respiratory failure risk)",
+        ))
+        
+        # TW-LACTATE: Lactate level
+        lactate = latest[FEAT_IDX["lactate"]]
+        tripwires.append(TripwireResult(
+            name="TW-LACTATE",
+            triggered=lactate > 2.0,
+            value=lactate,
+            threshold="> 2.0 mmol/L",
+            clinical_reason="Hyperlactatemia (tissue hypoperfusion, Sepsis-3)",
+        ))
+        
         # TW-MENTAL: GCS / Mental status
         gcs = latest[FEAT_IDX["gcs_total"]]
         tripwires.append(TripwireResult(
@@ -192,8 +217,20 @@ class RedTeamAgent:
         active = [tw for tw in tripwires if tw.triggered]
         n_active = len(active)
         
+        # Check for any single extreme vital that warrants immediate CRITICAL
+        has_extreme = (
+            hr > 150               # Severe tachycardia
+            or hr < 40             # Severe bradycardia
+            or map_val < 55        # Severe hypotension
+            or spo2 < 88           # Severe hypoxemia
+            or temp < 34.0         # Severe hypothermia
+            or temp > 40.0         # Severe hyperthermia
+            or lactate > 4.0       # Severe hyperlactatemia
+            or gcs <= 8            # Coma
+        )
+        
         # Determine override level
-        if n_active >= self.config.critical_tripwire_count:
+        if has_extreme or n_active >= self.config.critical_tripwire_count:
             override_level = "CRITICAL"
         elif n_active >= 1:
             override_level = "AMBER"
@@ -206,10 +243,12 @@ class RedTeamAgent:
             details_parts.append(
                 f"{tw.name}: {tw.value:.1f} ({tw.threshold}) — {tw.clinical_reason}"
             )
+        if has_extreme and n_active < self.config.critical_tripwire_count:
+            details_parts.append("EXTREME VITAL VALUE → auto-escalated to CRITICAL")
         details = "; ".join(details_parts) if details_parts else "All vitals within normal range"
         
         return RedTeamAssessment(
-            triggered=n_active > 0,
+            triggered=n_active > 0 or has_extreme,
             active_tripwires=tripwires,
             override_level=override_level,
             n_active=n_active,
