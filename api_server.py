@@ -159,16 +159,16 @@ def predict(vitals: VitalInputs):
     tripwire_list = []
     for tw in red_team.active_tripwires:
         tripwire_list.append({
-            "name": tw.name,
-            "triggered": tw.triggered,
+            "name": str(tw.name),
+            "triggered": bool(tw.triggered),
             "value": float(tw.value),
-            "threshold": tw.threshold,
-            "reason": tw.clinical_reason,
+            "threshold": str(tw.threshold),
+            "reason": str(tw.clinical_reason),
         })
 
     # Check for extreme values
     v = vitals
-    has_extreme = (
+    has_extreme = bool(
         v.heart_rate > 150 or v.heart_rate < 40 or
         v.map < 55 or v.spo2 < 88 or
         v.temperature < 34.0 or v.temperature > 40.0 or
@@ -193,11 +193,11 @@ def predict(vitals: VitalInputs):
             cxr_tripwires = runtime.red_team.evaluate_cxr(cxr_data)
             for tw in cxr_tripwires:
                 tripwire_list.append({
-                    "name": tw.name,
-                    "triggered": tw.triggered,
+                    "name": str(tw.name),
+                    "triggered": bool(tw.triggered),
                     "value": float(tw.value),
-                    "threshold": tw.threshold,
-                    "reason": tw.clinical_reason,
+                    "threshold": str(tw.threshold),
+                    "reason": str(tw.clinical_reason),
                 })
             logger.info(
                 "CXR analysis: modifier=+%.3f, findings=%d",
