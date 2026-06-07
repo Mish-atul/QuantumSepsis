@@ -13,6 +13,7 @@ import ResetPassword from "./pages/ResetPassword";
 import Index from "./pages/Index";
 import PatientDetail from "./pages/PatientDetail";
 import Admin from "./pages/Admin";
+import DemoSimulator from "./pages/DemoSimulator";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -43,6 +44,14 @@ const App = () => (
                 element={
                   <ProtectedRoute>
                     <PatientDetail />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/demo"
+                element={
+                  <ProtectedRoute>
+                    <DemoSimulator />
                   </ProtectedRoute>
                 }
               />
