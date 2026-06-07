@@ -54,3 +54,6 @@ fuo_paper_text.txt
 .idea/
 *.swp
 *.swo
+
+quantum-key.pem
+*.pem

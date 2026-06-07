@@ -255,6 +255,56 @@ class RedTeamAgent:
             details=details,
         )
     
+    def evaluate_cxr(self, cxr_findings: Dict) -> List[TripwireResult]:
+        """Evaluate chest X-ray findings for sepsis-relevant imaging tripwires.
+
+        Phase 2 extension: imaging-based safety tripwires that fire
+        independently of the ML pipeline (same design principle as
+        vital-sign tripwires).
+
+        Args:
+            cxr_findings: Output from ``cxr_encoder.get_sepsis_relevant_findings()``.
+
+        Returns:
+            List of TripwireResult for imaging findings (only triggered ones).
+        """
+        results: List[TripwireResult] = []
+        all_scores = cxr_findings.get("all_scores", {})
+
+        effusion = all_scores.get("Effusion", 0.0)
+        if effusion > 0.7:
+            results.append(TripwireResult(
+                name="TW-CXR-EFFUSION",
+                triggered=True,
+                value=round(effusion, 3),
+                threshold="> 0.70 confidence",
+                clinical_reason=(
+                    "Pleural effusion detected — fluid accumulation "
+                    "consistent with capillary leak / organ dysfunction"
+                ),
+            ))
+
+        pneumonia = all_scores.get("Pneumonia", 0.0)
+        if pneumonia > 0.6:
+            results.append(TripwireResult(
+                name="TW-CXR-PNEUMONIA",
+                triggered=True,
+                value=round(pneumonia, 3),
+                threshold="> 0.60 confidence",
+                clinical_reason=(
+                    "Pneumonia detected — pulmonary infection is the "
+                    "#1 source of sepsis (40% of cases)"
+                ),
+            ))
+
+        if results:
+            logger.info(
+                "CXR tripwires: %s",
+                ", ".join(f"{r.name}={r.value:.2f}" for r in results),
+            )
+
+        return results
+
     def _compute_trend(self, values: np.ndarray) -> float:
         """Compute linear trend (slope) of a time series.
         
