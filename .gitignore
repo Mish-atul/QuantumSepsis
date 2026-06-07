@@ -18,6 +18,10 @@ QUICKSTART.md
 CLAUDE.md
 backlog.md
 
+# FOU implementation planning documents (exclude from commits)
+docs/FOU_IMPLEMENTATION_PLAN.md
+docs/FOU_IMPLEMENTATION_SUMMARY.md
+
 # Python
 __pycache__/
 *.py[cod]
@@ -55,5 +59,7 @@ fuo_paper_text.txt
 *.swp
 *.swo
 
+QuantumSepsis_Complete_Backup
+.kiro/
 quantum-key.pem
 *.pem

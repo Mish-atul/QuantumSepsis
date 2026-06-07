@@ -1,11 +1,15 @@
 # QuantumSepsis Shield
 
-> **Adversarially-Safe Quantum-Classical System for Early Sepsis Detection**
+> **Adversarially-Safe Quantum-Classical System for Multi-Condition Early Warning**
 
-Sepsis kills 11 million people per year globally. QuantumSepsis Shield detects sepsis **3-4 hours before clinical onset** using a 5-layer agentic pipeline combining classical deep learning, quantum kernel methods, conformal prediction, and adversarial safety mechanisms.
+QuantumSepsis Shield is a unified platform for early detection of time-critical conditions in ICU patients. Initially focused on sepsis detection (11 million deaths/year globally), the system now extends to **Fever of Unknown Origin (FOU)** detection, demonstrating scalability of quantum ML approaches to multiple conditions.
+
+**Sepsis Detection:** 3-4 hours before clinical onset  
+**FOU Detection:** Multi-class categorization (Infectious, Non-infectious, Undiagnosed)
 
 ## Architecture
 
+### Sepsis Detection Pipeline
 ```
 Layer 1: Monitoring Agents     → Real-time data ingestion, 6-hour windowing
 Layer 2: BiLSTM Encoder        → Temporal encoding → 16-dim latent embedding
@@ -13,6 +17,16 @@ Layer 3: Quantum Kernel        → ZZFeatureMap (8 qubits) → QSVM classificati
 Layer 4a: Conformal Prediction → 90% coverage uncertainty intervals
 Layer 4b: Red Team Agent       → Non-overridable clinical tripwires (5 rules)
 Layer 5: Orchestrator          → Confidence-gated decision → WATCH/AMBER/CRITICAL/FAST-TRACK
+```
+
+### FOU Detection Pipeline
+```
+Layer 1: Monitoring Agents     → 24-hour windowing, 27 features
+Layer 2: BiLSTM Encoder        → Multi-class temporal encoding → 16-dim embedding
+Layer 3: Quantum Kernel        → One-vs-Rest QSVM (4 classes)
+Layer 4a: Conformal Prediction → Adaptive Prediction Sets (APS)
+Layer 4b: Red Team Agent       → FOU-specific tripwires (persistent fever, qSOFA, neutropenia)
+Layer 5: Unified Orchestrator  → Multi-condition priority logic
 ```
 
 ## Current Results
@@ -25,10 +39,28 @@ Layer 5: Orchestrator          → Confidence-gated decision → WATCH/AMBER/CRI
 | **Ensemble (30% LSTM + 70% XGBoost)** | **0.8051** | **0.0581** | **0.3213** |
 | **Qiskit Quantum Kernel (8 qubits)** | **0.7598** | **0.0365** | **0.2138** |
 
-### Quantum Advantage
+### Quantum Advantage (Sepsis)
 - **QCCP Width Reduction:** 55.8% tighter uncertainty intervals vs classical conformal
 - **Training Time:** 41.4 minutes (500×500 quantum kernel matrix)
 - **Support Vectors:** 395/500 (79% efficiency)
+
+## FOU Detection Results
+
+| Model | Macro F1 | Infectious AUROC | Non-infectious AUROC |
+|-------|----------|------------------|----------------------|
+| **Target (LSTM)** | **0.70** | **0.80** | **0.75** |
+| **Target (Quantum)** | **0.65** | **0.75** | **0.70** |
+
+### FOU Implementation Status
+- ✅ Configuration extended for FOU (27 features, 24-hour windows, 4-class output)
+- ✅ Data pipeline (cohort extraction, feature engineering, preprocessing, windowing)
+- ✅ Multi-class LSTM with Focal Loss
+- ✅ Multi-class conformal prediction (Adaptive Prediction Sets)
+- ✅ FOU-specific Red Team Agent (5 clinical tripwires)
+- ✅ Quantum kernel with One-vs-Rest QSVM
+- ✅ Unified orchestrator for multi-condition detection
+- ✅ Training scripts for full FOU pipeline
+- 🔄 **Ready for training on GPU server**
 
 ## Current Status
 
@@ -50,10 +82,11 @@ Layer 5: Orchestrator          → Confidence-gated decision → WATCH/AMBER/CRI
 | **Outcome learning simulation** | ✅ Complete |
 | **Phase 2 Pipeline (Conformal + Safety + Orchestrator)** | ✅ Complete |
 | **Unisys Innovation Program Materials** | ✅ Complete |
+| **FOU Extension Implementation** | ✅ Complete |
 
 ## Quick Start
 
-### GPU Server — Full Pipeline
+### GPU Server — Sepsis Pipeline (Complete)
 ```bash
 ssh csegpuserver@172.16.18.2
 cd ~/QuantumSepsis
@@ -83,6 +116,57 @@ python3 scripts/run_qccp.py
 python3 scripts/generate_quantum_report.py
 ```
 
+### GPU Server — FOU Pipeline (Ready for Training)
+```bash
+ssh csegpuserver@172.16.18.2
+cd ~/QuantumSepsis
+
+# Step 1: Extract FOU cohort from MIMIC-IV
+python3 -m src.data.cohort_extraction_fou \
+    data/raw/mimiciv/3.1 \
+    data/processed/fou
+
+# Step 2: Extract FOU features (27 features)
+python3 -m src.data.feature_engineering_fou \
+    data/raw/mimiciv/3.1 \
+    data/processed/fou/fou_cohort.csv \
+    data/processed/fou
+
+# Step 3: Preprocess features
+python3 -m src.data.preprocessing_fou \
+    data/processed/fou/fou_hourly_features.parquet \
+    data/processed/fou/fou_cohort.csv \
+    data/processed/fou
+
+# Step 4: Create windows (24-hour, 6-hour stride)
+python3 -m src.data.windowing_fou \
+    data/processed/fou/fou_train_features.parquet \
+    data/processed/fou/fou_val_features.parquet \
+    data/processed/fou/fou_test_features.parquet \
+    data/processed/fou/fou_features.h5
+
+# Step 5: Train FOU LSTM (multi-class)
+CUDA_VISIBLE_DEVICES=0 python3 scripts/train_fou_lstm.py \
+    --data data/processed/fou/fou_features.h5 \
+    --epochs 100 \
+    --batch-size 256
+
+# Step 6: Calibrate conformal prediction
+python3 scripts/calibrate_fou_conformal.py \
+    --model checkpoints/fou/fou_lstm_best.pt \
+    --data data/processed/fou/fou_features.h5
+
+# Step 7: Train quantum kernel (One-vs-Rest)
+python3 scripts/train_fou_quantum.py \
+    --embeddings data/processed/fou/fou_lstm_embeddings.npz \
+    --max-samples 2000
+
+# Step 8: E2E validation
+python3 scripts/run_fou_e2e_validation.py \
+    --model checkpoints/fou/fou_lstm_best.pt \
+    --data data/processed/fou/fou_features.h5
+```
+
 ### Local — Smoke Tests (no GPU or data needed)
 ```bash
 python3 scripts/run_conformal_calibration.py --synthetic
@@ -101,58 +185,62 @@ python3 tests/test_e2e_validation.py
 ```
 QuantumSepsis/
 ├── src/
-│   ├── config.py                           # All hyperparameters (dataclass-based)
-│   ├── data/                               # Data pipeline (7 modules)
-│   │   ├── cohort_extraction_optimized.py  # Memory-safe Sepsis-3 extraction
-│   │   ├── feature_extraction.py           # 12 vitals/labs per hour
-│   │   ├── feature_engineering_v1_enhanced.py # 39 features (12 raw + 27 derived)
-│   │   ├── preprocessing.py                # Imputation + normalization
-│   │   ├── windowing.py                    # 6-hour sliding windows → HDF5
+│   ├── config.py                           # Unified configuration (Sepsis + FOU + Unified)
+│   ├── data/                               # Data pipeline (Sepsis + FOU)
+│   │   ├── cohort_extraction_optimized.py  # Sepsis cohort extraction
+│   │   ├── cohort_extraction_fou.py        # FOU cohort extraction (NEW)
+│   │   ├── feature_extraction.py           # Sepsis feature extraction (12 features)
+│   │   ├── feature_engineering_fou.py      # FOU feature extraction (27 features) (NEW)
+│   │   ├── preprocessing.py                # Sepsis preprocessing
+│   │   ├── preprocessing_fou.py            # FOU preprocessing (NEW)
+│   │   ├── windowing.py                    # Sepsis windowing (6-hour)
+│   │   ├── windowing_fou.py                # FOU windowing (24-hour) (NEW)
 │   │   └── dataset.py                      # PyTorch DataLoaders
-│   ├── models/                             # 5 model modules
-│   │   ├── lstm.py                         # BiLSTM + Temporal Attention (~420K params)
-│   │   ├── ensemble_lstm_xgb.py            # Ensemble (30% LSTM + 70% XGBoost)
-│   │   ├── losses.py                       # Asymmetric Focal Loss (FN=9×FP)
-│   │   ├── quantum_kernel.py               # ZZFeatureMap + QSVM (Qiskit)
-│   │   └── conformal.py                    # Split Conformal + QCCP
-│   ├── training/train_lstm.py              # Full training with early stopping + W&B
-│   ├── agents/                             # Safety agents (3 modules)
-│   │   ├── red_team.py                     # 5 non-overridable clinical tripwires
-│   │   ├── orchestrator.py                 # Confidence-gated alert fusion
-│   │   └── outcome_learner.py              # Adaptive threshold tuning + near-miss feedback
-│   ├── baselines/                          # XGBoost + SOFA comparisons
-│   └── evaluation/metrics.py               # AUROC, AUPRC, calibration
-├── scripts/                                # Pipeline runner scripts
-│   ├── train_v1_improved.py                # LSTM V1 Improved training (39 features)
-│   ├── train_xgboost_real.py               # XGBoost baseline training
-│   ├── evaluate_real_ensemble.py           # Ensemble evaluation
-│   ├── run_ensemble_conformal.py           # Ensemble conformal calibration
-│   ├── run_ensemble_e2e_validation.py      # Ensemble E2E validation
-│   ├── run_quantum_fixed.py                # Quantum kernel training (Qiskit)
-│   ├── run_qccp.py                         # Quantum-calibrated conformal prediction
-│   ├── generate_quantum_report.py          # Unisys Innovation Program report
-│   ├── run_conformal_calibration.py        # LSTM → q_alpha → conformal intervals
-│   ├── run_e2e_validation.py               # LSTM + Conformal + RedTeam + Orchestrator
-│   ├── run_outcome_learning_simulation.py  # Adaptive feedback loop on test decisions
-│   ├── run_windowing_real.py               # Real-data windowing runner
-│   └── run_real_baselines.py               # Baseline metric comparison
-├── tests/                                  # Edge case tests
-│   ├── test_conformal_calibration.py       # 14 tests (coverage, boundaries, edge cases)
-│   └── test_e2e_validation.py              # 17 tests (full pipeline, missing files, etc.)
+│   ├── models/                             # Models (Sepsis + FOU)
+│   │   ├── lstm.py                         # Sepsis BiLSTM (binary)
+│   │   ├── lstm_fou.py                     # FOU BiLSTM (multi-class) (NEW)
+│   │   ├── losses.py                       # Focal Loss + Multi-class Focal Loss (UPDATED)
+│   │   ├── ensemble_lstm_xgb.py            # Sepsis ensemble
+│   │   ├── quantum_kernel.py               # Sepsis quantum kernel
+│   │   ├── quantum_kernel_fou.py           # FOU quantum kernel (One-vs-Rest) (NEW)
+│   │   ├── conformal.py                    # Sepsis conformal prediction
+│   │   └── conformal_fou.py                # FOU conformal (APS + QCCP) (NEW)
+│   ├── agents/                             # Safety agents (Sepsis + FOU + Unified)
+│   │   ├── red_team.py                     # Sepsis red team (5 tripwires)
+│   │   ├── red_team_fou.py                 # FOU red team (5 FOU-specific tripwires) (NEW)
+│   │   ├── orchestrator.py                 # Sepsis orchestrator
+│   │   ├── orchestrator_unified.py         # Unified multi-condition orchestrator (NEW)
+│   │   └── outcome_learner.py              # Adaptive threshold tuning
+│   ├── baselines/                          # Baselines
+│   │   ├── sofa_baseline.py                # SOFA score baseline
+│   │   └── xgboost_baseline.py             # XGBoost baseline
+│   └── evaluation/metrics.py               # Evaluation metrics
+├── scripts/                                # Training scripts (Sepsis + FOU)
+│   ├── train_v1_improved.py                # Sepsis LSTM training
+│   ├── train_fou_lstm.py                   # FOU LSTM training (NEW)
+│   ├── train_xgboost_real.py               # Sepsis XGBoost training
+│   ├── evaluate_real_ensemble.py           # Sepsis ensemble evaluation
+│   ├── run_ensemble_conformal.py           # Sepsis conformal calibration
+│   ├── calibrate_fou_conformal.py          # FOU conformal calibration (NEW)
+│   ├── run_ensemble_e2e_validation.py      # Sepsis E2E validation
+│   ├── run_fou_e2e_validation.py           # FOU E2E validation (NEW)
+│   ├── run_quantum_fixed.py                # Sepsis quantum kernel
+│   ├── train_fou_quantum.py                # FOU quantum kernel (NEW)
+│   ├── run_qccp.py                         # Sepsis QCCP
+│   └── generate_quantum_report.py          # Unisys report generator
 ├── docs/                                   # Documentation
-│   ├── UNISYS_PRESENTATION_SUMMARY.md      # Complete Unisys presentation guide
-│   ├── UNISYS_EXECUTIVE_SUMMARY.txt        # One-page executive summary
-│   ├── RESULT_FILES_GUIDE.md               # Guide to all result files
+│   ├── FOU_IMPLEMENTATION_PLAN.md          # FOU implementation plan
+│   ├── FOU_DOCUMENTATION.md                # FOU system documentation (NEW)
+│   ├── UNISYS_PRESENTATION_SUMMARY.md      # Unisys presentation guide
 │   ├── FINAL_RESULTS.md                    # Final results summary
-│   ├── IMPLEMENTATION_PLAN.md              # Detailed execution plan
-│   └── MODEL_IMPROVEMENT.md                # Model improvement strategies
-├── files/                                  # Technical documentation
-│   ├── architecture.md                     # Full 5-layer technical spec
-│   ├── dataset.md                          # MIMIC-IV v3.1 reference
-│   ├── novelty.md                          # 3 novel contributions
-│   └── roadmap.md                          # Execution plan
-├── agents.md                               # Complete project knowledge base
-├── PROGRESS_REPORT.md                      # Progress + teammate handoff
+│   └── IMPLEMENTATION_PLAN.md              # Sepsis implementation plan
+├── data/                                   # Data directories
+│   ├── raw/mimiciv/3.1/                    # MIMIC-IV v3.1 raw data
+│   ├── processed/sepsis/                   # Sepsis processed data
+│   └── processed/fou/                      # FOU processed data (NEW)
+├── checkpoints/                            # Model checkpoints
+│   ├── sepsis/                             # Sepsis model checkpoints
+│   └── fou/                                # FOU model checkpoints (NEW)
 └── requirements.txt                        # Python dependencies
 ```
 
