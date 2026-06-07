@@ -63,3 +63,4 @@ QuantumSepsis_Complete_Backup
 .kiro/
 quantum-key.pem
 *.pem
+*.zip
